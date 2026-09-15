@@ -16,6 +16,8 @@
 | 自定义工作流 | `E:\ComfyUI-MCP\workflows\`（经 `COMFY_MCP_WORKFLOW_DIR` 生效） |
 | 本地执行器 | `E:\ComfyUI-MCP\tools\run_workflow.py`（复用 MCP 真实渲染逻辑） |
 | 自定义节点 | `E:\ComfyUI-MCP\custom_nodes\ComfyUI-MiniMax-H3-API\` → 用 `install-minimax-node.bat` 同步进 ComfyUI |
+| 本机环境守卫 | `E:\ComfyUI-MCP\local-env\` ← junction ← `E:\WBData\_tools\`，把 WorkBuddy 数据钉在 E 盘 |
+| 技能归档 | `E:\ComfyUI-MCP\skills\`（`C:\Users\legion\.workbuddy\skills` 的只读副本） |
 | ComfyUI 本体 | `E:\Comfy-Desktop\ComfyUI-Installs\ComfyUI\`（Comfy Desktop 独立版 v0.28.0） |
 | 模型 / 输入 / 输出 | `E:\Comfy-Desktop\ComfyUI-Shared\` |
 | 运行日志 | `E:\ComfyUI-MCP\logs\comfyui-headless.log` |
@@ -191,6 +193,26 @@ ComfyUI 启动日志会出现 `Using sage attention`。**但默认不加 `--use-
 | 提交工作流被拒 `Prompt has no outputs` | 自定义节点漏了 `OUTPUT_NODE = True` |
 | H3 节点提示未配置 API Key | 写 `E:\Comfy-Desktop\ComfyUI-Cache\minimax_key.txt`（单行纯文本） |
 | 装了 H3 节点但 ComfyUI 里看不到 | 跑 `install-minimax-node.bat` 再重启后端；确认 `object_info/MiniMaxH3Video` 有返回 |
+
+## 本机环境：把数据钉在 E 盘（`local-env/`）
+
+本机强制要求所有文件落 E 盘，而 WorkBuddy / CodeBuddy / pip / npm 都把数据路径**写死在 C 盘**。
+`local-env/` 用 NTFS 目录联接（junction）解决：C 盘保留原路径，但它只是 0 字节重解析点，
+真实写入全部落到 E 盘 —— **所以不需要改任何配置里的路径**。
+
+- 运行时对外路径 `E:\WBData\_tools\` 本身是一个**联结**，指向本仓库的 `local-env/`。
+  这样脚本只有一份（不会出现「仓库一份、运行一份」的漂移），而启动项里写死的
+  `E:\WBData\_tools\guard.ps1` 照常命中。
+  换机重建：`mklink /J E:\WBData\_tools E:\ComfyUI-MCP\local-env`
+- `guard.ps1` 挂在登录启动项，每次登录做两件事：① 把被打回真实目录的映射重新挂成联结；
+  ② 把 `settings.json` 的 `autoLaunchDesired` 改回 `false`，并删掉注册表 Run 里的自启值。
+- **联结会被周期性破坏**（实测 19:03 还是联结、00:15 已变回真实目录），
+  所以这个登录守卫不是冗余、是命脉；长期不注销/重启就会漏，C 盘会重新被写。
+- 审计当前状态（只读，不改任何东西）：`python E:\WBData\_tools\audit_links.py`
+- 完整映射表、安全约束、踩坑见 `local-env/使用说明.md`。
+
+`skills/` 是 `C:\Users\legion\.workbuddy\skills` 的副本（那边才是 WorkBuddy 实际读取的位置），
+给这几套方法论留一份版本化存档。
 
 ## 本机踩过的坑（改动前先读）
 

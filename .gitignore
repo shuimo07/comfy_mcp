@@ -8,6 +8,10 @@ assets/
 .tmp/
 .pip-cache/
 
+# ---------- local-env 的运行时日志（脚本留在库里，日志不留）----------
+local-env/*.log
+local-env/legacy/*.log
+
 # ---------- 大文件 / 生成物 ----------
 *.safetensors
 *.ckpt
