@@ -124,23 +124,36 @@ agent_created: true
 **它不是自启源**，是"E 盘 junction 重定向 + 压制自启"的守卫，**必须保留**。
 
 2026-09-15 白天修正：从 `guard.ps1` 的 `$maps` 中**移除** `C:\Users\legion\.workbuddy` 这条迁移项
-（那是 WB 运行时在用目录，迁移会锁文件卡死），其余 5 条保留；并补了"Run 值存在就直接删"的逻辑。
+（那是 WB 运行时在用目录，迁移会锁文件卡死），其余保留；并补了"Run 值存在就直接删"的逻辑。
 改完必须手动跑一次验证能在 1 秒内跑完、日志以 `guard done` 收尾。
 
-2026-09-15 晚修正：用户改主意要求"C 盘都搬到 E"，`.workbuddy` **重新纳入**，
-但用两道保险防卡死：
-1. 登录时 WorkBuddy 不自启（本技能 Part 1 的结果），本来就没在跑；
-2. `Ensure-Junction` 新增 **`-BlockIfRunning @('WorkBuddy','CodeBuddy')`** ——
-   **在 `Remove-Item` 之前**再查一次进程，正在跑就放弃（数据已拷到 E，下次登录补增量）。
-   注意这个检查必须放在 **copy+核对之后、delete 之前**，放在函数入口是没用的。
+2026-09-15 晚修正：用户一度改主意要求"C 盘都搬到 E"，`.workbuddy` **重新纳入**，
+用两道保险防卡死：1) 登录时 WorkBuddy 不自启，本来就没在跑；
+2) `Ensure-Junction` 新增 **`-BlockIfRunning @('WorkBuddy','CodeBuddy')`** ——
+**在 `Remove-Item` 之前**再查一次进程，正在跑就放弃。
+（注意这个检查必须放在 **copy+核对之后、delete 之前**，放在函数入口是没用的。）
 
-2026-09-16 修正：`$maps` **新增第 9 条**
-`AppData\Local\@genieworkbuddy-desktop-updater` → `E:\WBData\local\genieworkbuddy-updater`。
-这是 WorkBuddy 桌面版的**更新器下载缓存**（`installer.exe`，单个 **507 MB**，旧包不会自动清），
-属纯缓存、放 E 盘完全不影响更新，已无损搬迁并登记。
-顺带复核：`C:\Users\legion\.workbuddy` 已涨到 **242,384 文件 / 2.41 GB**，
-且 **14 小时就新增 17.3 万文件 / 591 MB**（`logs/`、`workbuddy.db-wal`、`projects/*.jsonl`、
-`file-history/`、`traces/`）→ **它是 C 盘唯一还在猛写的大户，必须尽快搬**。
+⛔ **2026-09-16 终局：`.workbuddy` 彻底放弃搬迁，保持 C 盘真实目录。**
+用户明确表态「**就不管了，任之吧**」，`guard.ps1` 里那段
+`Ensure-Junction 'C:\Users\legion\.workbuddy' ...` 已**删除**。
+放弃的理由（两个死结，别再试）：
+1. 整个会话就跑在它上面 → 句柄必然被 WB 自己锁死，**就地搬迁 100% 失败**；
+2. 会话备份目录（`workspace\sessions\*\modify_backup\`）持续增长，
+   沙箱预拷贝永远追不上增量 → `dst < src` → **整体 ABORT**。
+   （实测 24.3 万文件 / 2.41 GB，14 小时就新增 17.3 万文件 / 591 MB。）
+
+**不要再把它加回 `$maps`，也不要恢复那段调用。**
+替代方案：用 `E:\WBData\_tools\archive_old_logs.py` 定期把 `.workbuddy\logs` / `traces`
+下 mtime 早于 2 小时的文件搬到 E（`E:\WBData\home\.workbuddy-logs` / `.workbuddy-traces`），
+`--dry-run` 先看规模。**建议每周跑一次。**
+改完后登录守卫只处理 11 条映射 + 压制自启，**秒级返回，不再有任何大文件拷贝**。
+
+2026-09-16 新增映射：`$maps` 补到 **11 条**，其中新增 3 条：
+- 第 9 条 `AppData\Local\@genieworkbuddy-desktop-updater` → `E:\WBData\local\genieworkbuddy-updater`
+  （WorkBuddy 桌面版**更新器下载缓存**，`installer.exe` 单个 **507 MB**，旧包不会自动清，
+  纯缓存、放 E 盘不影响更新）
+- 第 10 条 `AppData\Local\comfyui-desktop-2-updater` → `E:\WBData\local\comfyui-desktop-2-updater`（152 MB）
+- 第 11 条 `AppData\Roaming\Comfy Desktop` → `E:\WBData\roaming\ComfyDesktop`（62 MB，**目录名带空格，注意引用**）
 
 ## Part 2.4：junction 被"打回真目录"后的修复（2026-09-15/16 实战）
 
@@ -239,26 +252,28 @@ $j | ForEach-Object { $_.FullName + ' -> ' + ($_.Target -join '') }
 - 删除后必须核验：目标 junction 是否仍可达（`Test-Path`）、进程数、配置文件是否仍合法。
 
 ## 用户约定（勿违反）
-- 所有数据默认落 E 盘。`guard.ps1` 的 `$maps`（**9 条**，登录时自愈）：
+- 所有数据默认落 E 盘。`guard.ps1` 的 `$maps`（**11 条**，登录时自愈，秒级返回）：
   `WorkBuddy`→`E:\WorkBuddy`、`.cache`→`E:\WBData\home\.cache`、
   `.codebuddy`→`E:\WBData\home\.codebuddy`、
   `.workbuddy-key-fallback`→`E:\WBData\home\.workbuddy-key-fallback`、
   `AppData\Local\pip\cache`→`E:\WBData\local\pip-cache`、
   `AppData\Roaming\npm`→`E:\WBData\roaming\npm`、
   `AppData\Roaming\WorkBuddy`(及小写 `workbuddy`)→`E:\WBData\roaming\WorkBuddy`、
-  `AppData\Local\@genieworkbuddy-desktop-updater`→`E:\WBData\local\genieworkbuddy-updater`，
-  加上单独调用（带 `-BlockIfRunning`）的 `.workbuddy`→`E:\WBData\home\.workbuddy`。
-  → **`E:\WBData\_tools\audit_links.py` 里内建的 `EXPECTED` 表要同步这 9 条**，否则会误报"待迁移"。
+  `AppData\Local\@genieworkbuddy-desktop-updater`→`E:\WBData\local\genieworkbuddy-updater`、
+  `AppData\Local\comfyui-desktop-2-updater`→`E:\WBData\local\comfyui-desktop-2-updater`、
+  `AppData\Roaming\Comfy Desktop`→`E:\WBData\roaming\ComfyDesktop`。
+  → **`E:\WBData\_tools\audit_links.py` 里内建的 `EXPECTED` 表要同步这 11 条**，否则会误报"待迁移"。
 - **`C:\Users\legion\AppData` 有 61 GB 但主体是第三方软件数据**（剪映/腾讯/TRAE/豆包/Google…），
   **不要整体 junction**（会打坏应用和更新器）；要动只能逐目录评估。
-- **`.workbuddy` 是最后一块、也是最难的一块**（2026-09-16 实测 **242,384 文件 / 2.41 GB**，
-  且还在以 **~591 MB / 14 小时** 的速度增长；文件数大头在
-  `workspace\sessions\<id>\modify_backup`，增量大头在 `logs/`、`workbuddy.db-wal`、
-  `projects/*.jsonl`、`file-history/`、`traces/`）。它**无法在 WorkBuddy 运行时就地搬迁**
-  —— 当前会话自身就跑在它上面（那个 Python 解释器也在 `binaries\python` 里）。
-  且沙箱内预拷贝跟不上它的增长（白跑过 18 分钟只拷 3.4 万）。
-  → 正确打法：**不做预拷贝**，交给登录守卫一次性整体搬迁（登录时 WB 不自启 + 删源前查进程）。
-  用户侧只需「注销或重启」，然后看 `guard.log`。
+- ⛔ **`.workbuddy` 永不搬迁（2026-09-16 用户拍板）** —— 用户原话「**就不管了，任之吧**」。
+  它现在是 C 盘唯一的大件（**242,384 文件 / 2.41 GB**，增速 ~591 MB / 14 小时；
+  大头在 `workspace\sessions\<id>\modify_backup`、`logs/`、`workbuddy.db-wal`、
+  `projects/*.jsonl`、`file-history/`、`traces/`），但**不要再打它的主意**：
+  - 就地搬迁必然失败 —— 整个 WorkBuddy 会话就跑在它上面，句柄被自己锁死；
+  - 预拷贝永远追不上增量（实测白跑 18 分钟只拷 3.4 万）→ `dst < src` → **整体 ABORT**。
+  → 保持 **C 盘真实目录**，不做 junction。只需用 `archive_old_logs.py` 定期把 `logs/`、`traces/`
+    里 mtime 早于 2 小时的文件搬到 E 压住增长（**建议每周一次**，`--dry-run` 先看规模），其余放任。
+  → **不要再把它加回 `$maps`，也不要恢复 `guard.ps1` 里那段 `Ensure-Junction`。**
 - **脚本目录已纳入版本库（2026-09-16）**：`E:\WBData\_tools` 现在是一个
   **junction → `E:\ComfyUI-MCP\local-env`**（仓库 `shuimo07/comfy_mcp`）。所以：
   - 改脚本直接改 `E:\WBData\_tools\...`，改动即落在仓库工作区，然后

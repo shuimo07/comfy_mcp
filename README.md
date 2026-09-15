@@ -24,6 +24,14 @@
 
 WorkBuddy 侧配置：`C:\Users\legion\.workbuddy\mcp.json`，服务名 `comfyui`，stdio 传输。
 
+> ⏸️ **2026-09-16 起该 MCP 已从 `mcp.json` 注销（现为 `{"mcpServers": {}}`），处于「关闭」状态。**
+> 原因：它 env 里带 `COMFYUI_AUTOSTART=1` —— WorkBuddy 一拉起这个 MCP 就会**自动把 ComfyUI 后端
+> 一起启动**（常驻约 1 GB 内存），而当前还在等 MiniMax H3 的 API key，根本用不上。
+> **想重新启用**：把 `config\workbuddy-mcp.example.json` 里 `mcpServers.comfyui` 整段合并回
+> `C:\Users\legion\.workbuddy\mcp.json`，再到 WorkBuddy 连接器管理右上角「自定义连接器」
+> 对 `comfyui` 点「信任」，重启应用。
+> **只想要 MCP、不想自动起后端**：把 `COMFYUI_AUTOSTART` 改成 `"0"`。
+
 > 该文件与 PowerBI 无关。三个 PowerBI MCP 服务配在 **DSH** 的
 > `E:\.dsh\profiles\web\cordis.patch.yml`，是另一套独立配置。
 
@@ -299,3 +307,13 @@ git -C E:\ComfyUI-MCP reset --hard <sha>    :: 整体回滚
 - SageAttention 装上但**默认关闭**：triton 缺预编译 `cuda_utils.pyd`、JIT 需要 MSVC，
   本机没有 → 出图卡死（>180s）；关闭后同任务 3.0 秒。
 - 实测数据全部来自 **RTX 4060 Laptop / 8.6 GB / ComfyUI 0.28.0 / torch 2.12.1+cu130**。
+
+**2026-09-16（休眠：把用不上的都关掉）**
+
+- ComfyUI 后端进程（2 个 python，约 1 GB）已关闭，8188 端口释放。
+- WorkBuddy 侧 `comfyui` MCP **已注销**（`mcp.json` → `{"mcpServers": {}}`）：
+  它带 `COMFYUI_AUTOSTART=1`，只要 WorkBuddy 一用这个 MCP 就会**自动拉起 ComfyUI 后端**，
+  在等 API key 的阶段纯属白占内存。随时可按「从零重建」第 4–5 步装回来。
+- 清掉僵尸文件 `logs\comfyui-headless.pid`（5 B，指向已死进程）与 `.log.prev`。
+- 附带：`E:\Temp` 清理 139.2 MB（只删 24 小时前的）；`~/.workbuddy/mcp.json` 现为空。
+- 结论：**代码和配置全部保留在仓库，只是不跑**。等 MiniMax H3 的 API key 到位再启动。

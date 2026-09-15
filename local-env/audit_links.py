@@ -16,7 +16,9 @@ ATTR_REPARSE = 0x400
 
 # guard.ps1 $maps 里登记的映射（源 -> 期望目标）
 EXPECTED = [
-    (r"C:\Users\legion\.workbuddy", r"E:\WBData\home\.workbuddy"),
+    # ⛔ 2026-09-16: C:\Users\legion\.workbuddy 已从表中移除 —— 用户拍板「就不管了，任之吧」，
+    # 该目录保持 C 盘真实目录、永不迁移。留在表里会永远误报「待迁移」。
+    # 见 guard.ps1 顶部同名注释、使用说明.md「.workbuddy 不再搬迁」章节。
     (r"C:\Users\legion\.codebuddy", r"E:\WBData\home\.codebuddy"),
     (r"C:\Users\legion\.workbuddy-key-fallback", r"E:\WBData\home\.workbuddy-key-fallback"),
     (r"C:\Users\legion\.cache", r"E:\WBData\home\.cache"),

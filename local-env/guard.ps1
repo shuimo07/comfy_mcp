@@ -27,15 +27,11 @@ $maps = @(
 foreach ($m in $maps) { Ensure-Junction $m[0] $m[1] }
 
 # --- C:\Users\legion\.workbuddy ------------------------------------------------
-# 2026-09-15 (晚): 用户要求把 C 盘的东西都搬到 E，于是重新纳入搬迁范围。
-# （9-14 曾因「WorkBuddy 运行中搬迁会卡死/lock」而排除，这次用两道保险解决：
-#   1) 登录时 WorkBuddy 不自启，本来就没在跑；
-#   2) Ensure-Junction 的 -BlockIfRunning 会在删除前再查一次进程，
-#      正在跑就直接放弃 —— 数据已拷到 E，下次登录再补增量即可。）
-# 注意：218k 文件 / 1.6 GB，沙箱里预拷贝跟不上增量（会话备份目录一直在涨），
-#       所以不做预拷贝，直接让登录守卫一次性整体搬迁。
-Ensure-Junction 'C:\Users\legion\.workbuddy' 'E:\WBData\home\.workbuddy' `
-    -BlockIfRunning @('WorkBuddy', 'CodeBuddy', 'workbuddy')
+# 2026-09-16: 用户明确决定「就不管了，任之吧」—— 停止搬迁，保持 C 盘真实目录。
+# 历史：曾整体搬迁（218k 文件 / 2.4 GB），但沙箱预拷贝跟不上增量（会话备份目录一直涨），
+#       且始终被运行中的 WorkBuddy 句柄死锁，反复 ABORT。
+# ⛔ 禁止再把它加回 $maps、也禁止恢复本段 Ensure-Junction 调用。
+#    （对应记忆：~/.workbuddy/MEMORY.md「存储」章节 2026-09-16 更新）
 
 # stale WorkBuddy temp dirs left in the old TEMP location
 $oldTemp = 'C:\Users\legion\AppData\Local\Temp'
