@@ -1,0 +1,30 @@
+# ---------- 运行时产物（不进版本库）----------
+.venv/
+__pycache__/
+*.py[cod]
+logs/
+runtime/
+assets/
+.tmp/
+.pip-cache/
+
+# ---------- 大文件 / 生成物 ----------
+*.safetensors
+*.ckpt
+*.gguf
+*.part
+output/
+*.png
+*.jpg
+*.webp
+
+# ---------- 凭据绝不入库 ----------
+.git-credentials
+*.token
+.env
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

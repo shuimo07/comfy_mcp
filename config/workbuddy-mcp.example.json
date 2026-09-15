@@ -1,0 +1,24 @@
+{
+  "_comment": "把 mcpServers.comfyui 这一段合并进 C:\\Users\\legion\\.workbuddy\\mcp.json 后，需在 WorkBuddy 连接器管理右上角「自定义连接器」对 comfyui 点「信任」并重启应用。",
+  "mcpServers": {
+    "comfyui": {
+      "type": "stdio",
+      "command": "E:\\ComfyUI-MCP\\.venv\\Scripts\\python.exe",
+      "args": [
+        "E:\\ComfyUI-MCP\\mcp_entry.py"
+      ],
+      "env": {
+        "COMFYUI_URL": "http://127.0.0.1:8188",
+        "COMFYUI_AUTOSTART": "1",
+        "COMFYUI_BOOT_TIMEOUT": "90",
+        "COMFY_MCP_DEFAULT_IMAGE_MODEL": "v1-5-pruned-emaonly-fp16.safetensors",
+        "COMFY_MCP_WORKFLOW_DIR": "E:\\ComfyUI-MCP\\comfyui-mcp-server\\workflows",
+        "COMFYUI_OUTPUT_ROOT": "E:\\Comfy-Desktop\\ComfyUI-Shared\\output",
+        "COMFY_MCP_ASSET_TTL_HOURS": "24",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONUTF8": "1"
+      },
+      "timeout": 600000
+    }
+  }
+}

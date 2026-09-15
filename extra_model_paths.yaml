@@ -1,0 +1,34 @@
+# ComfyUI-MCP 专用的模型路径映射
+# 与 Comfy Desktop 使用的实例配置保持一致，模型统一放在 E 盘 Shared 目录。
+comfy.desktop_0:
+  base_path: 'E:\Comfy-Desktop\ComfyUI-Shared\models'
+  is_default: true
+  'checkpoints': 'checkpoints/'
+  'classifiers': 'classifiers/'
+  'clip_vision': 'clip_vision/'
+  'configs': 'configs/'
+  'controlnet': |-
+    controlnet/
+    t2i_adapter/
+  'diffusers': 'diffusers/'
+  'diffusion_models': 'diffusion_models/'
+  'embeddings': 'embeddings/'
+  'gligen': 'gligen/'
+  'hypernetworks': 'hypernetworks/'
+  'latent_upscale_models': 'latent_upscale_models/'
+  'loras': 'loras/'
+  'model_patches': 'model_patches/'
+  'audio_encoders': 'audio_encoders/'
+  'photomaker': 'photomaker/'
+  'style_models': 'style_models/'
+  'text_encoders': 'text_encoders/'
+  'upscale_models': 'upscale_models/'
+  'background_removal': 'background_removal/'
+  'frame_interpolation': 'frame_interpolation/'
+  'geometry_estimation': 'geometry_estimation/'
+  'optical_flow': 'optical_flow/'
+  'detection': 'detection/'
+  'vae': 'vae/'
+  'vae_approx': 'vae_approx/'
+  'clip': 'clip/'
+  'unet': 'unet/'

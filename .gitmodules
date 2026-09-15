@@ -1,0 +1,4 @@
+[submodule "comfyui-mcp-server"]
+	path = comfyui-mcp-server
+	url = https://github.com/joenorton/comfyui-mcp-server.git
+	branch = main
