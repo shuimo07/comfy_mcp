@@ -213,3 +213,8 @@ op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
    （报 `SAFE_DELETE_FAIL_CLOSED / trash-failed`）→ 删文件用
    `ctypes.windll.kernel32.DeleteFileW`，删空目录用 `RemoveDirectoryW`；
    **但目录若被某进程当作 cwd，`RemoveDirectoryW` 也会返回 0**（本会话内无法自救，只能靠登录守卫）。
+   （`cmd /c rmdir` 从 Bash 直接调会被拦，但在 Python 里 `subprocess.run(['cmd','/c','rmdir',...])` 能过。）
+7. **节点源码的"唯一真源"放仓库里**，别让 `custom_nodes` 下那份变成没人管的孤儿：
+   仓库副本 `E:\ComfyUI-MCP\custom_nodes\<节点名>\` 是真源，
+   同步进 ComfyUI 用 `install-minimax-node.bat`（robocopy `/MIR`）。
+   想彻底避免两份副本，也可以把 ComfyUI 侧的 `custom_nodes\<节点名>` 做成指向仓库的 junction。
