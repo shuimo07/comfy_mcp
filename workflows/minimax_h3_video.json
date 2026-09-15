@@ -1,0 +1,19 @@
+{
+  "1": {
+    "inputs": {
+      "prompt": "PARAM_STR_PROMPT",
+      "duration": "PARAM_INT_DURATION",
+      "resolution": "768P",
+      "ratio": "16:9",
+      "region": "cn",
+      "poll_interval": 10,
+      "timeout": 1800,
+      "run_nonce": 0,
+      "api_key": ""
+    },
+    "class_type": "MiniMaxH3Video",
+    "_meta": {
+      "title": "MiniMax H3 视频生成 (API)"
+    }
+  }
+}

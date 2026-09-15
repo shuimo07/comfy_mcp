@@ -1,0 +1,29 @@
+{
+  "1": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "首帧图（ComfyUI input 目录里的文件名）"
+    }
+  },
+  "2": {
+    "inputs": {
+      "prompt": "PARAM_STR_PROMPT",
+      "duration": "PARAM_INT_DURATION",
+      "resolution": "768P",
+      "ratio": "adaptive",
+      "region": "cn",
+      "poll_interval": 10,
+      "timeout": 1800,
+      "run_nonce": 0,
+      "api_key": "",
+      "first_frame": ["1", 0]
+    },
+    "class_type": "MiniMaxH3Video",
+    "_meta": {
+      "title": "MiniMax H3 图生视频 (API)"
+    }
+  }
+}

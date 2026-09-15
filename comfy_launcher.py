@@ -99,10 +99,31 @@ def _write_launch_script() -> Path:
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     port = _port_of(COMFYUI_URL)
+    # ------------------------------------------------------------------
+    # SageAttention 加速开关（默认关）
+    #
+    # 现状（2026-09-15 实测）：sageattention 2.2 + triton-windows 3.8 已装进 .venv，
+    # ComfyUI 也能识别（启动日志出现 "Using sage attention"），但**出图会卡死**。
+    # 根因：SageAttention 的 int8 量化预处理走 triton，triton 首次执行时
+    # 要 JIT 编译 backends/nvidia/driver.c 生成 cuda_utils，这需要 MSVC 编译器；
+    # 本机没有装 VS Build Tools（cl.exe 不存在），于是卡约 120s 后抛
+    #   ImportError: DLL load failed while importing cuda_utils
+    # 表现为：提交任务后一直 "running"，连 256x256/4步都跑不完，interrupt 也无效。
+    #
+    # 解决：装 VS Build Tools（勾选 "使用 C++ 的桌面开发"），然后设
+    #   COMFY_USE_SAGE_ATTENTION=1
+    # 即可开启。届时 RTX 4060 Laptop(Ada sm_89) 走 SageAttention2++ 内核，
+    # 预期 30-40% 提速。
+    # ------------------------------------------------------------------
+    use_sage = os.getenv("COMFY_USE_SAGE_ATTENTION", "0") == "1"
+    sage_arg = " --use-sage-attention" if use_sage else ""
+    if use_sage:
+        log("SageAttention 已启用（COMFY_USE_SAGE_ATTENTION=1）")
     args = (
-        f'"{COMFY_PY}" -s "{COMFY_MAIN}"'
+        f'"{COMFY_PY}" -u -s "{COMFY_MAIN}"'
         f" --listen 127.0.0.1 --port {port}"
         f" --enable-manager"
+        f"{sage_arg}"
         f' --extra-model-paths-config "{MODEL_YAML}"'
         f' --input-directory "{SHARED_DIR / "input"}"'
         f' --output-directory "{SHARED_DIR / "output"}"'

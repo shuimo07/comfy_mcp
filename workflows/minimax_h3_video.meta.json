@@ -1,0 +1,14 @@
+{
+  "name": "MiniMax H3 文生视频 (API)",
+  "description": "用 MiniMax H3 官方 API 生成 4~15 秒、带原生音效的视频（本地不跑模型、不占显存）。必填 prompt；duration 为秒数(4~15，默认5)。固定 768P / 16:9 / 国内站点 api.minimaxi.com。",
+  "defaults": {
+    "duration": 5
+  },
+  "override_mappings": {
+    "prompt": [["1", "prompt"]],
+    "duration": [["1", "duration"]]
+  },
+  "constraints": {
+    "duration": { "min": 4, "max": 15 }
+  }
+}

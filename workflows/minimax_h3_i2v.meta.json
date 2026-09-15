@@ -1,0 +1,15 @@
+{
+  "name": "MiniMax H3 图生视频 (API)",
+  "description": "以一张图作为首帧，用 MiniMax H3 官方 API 让它动起来（4~15 秒，带原生音效）。image 传 ComfyUI input 目录里的文件名；prompt 必填；duration 秒数(4~15，默认5)。图生视频画幅由图片决定（ratio 固定 adaptive）。",
+  "defaults": {
+    "duration": 5
+  },
+  "override_mappings": {
+    "image": [["1", "image"]],
+    "prompt": [["2", "prompt"]],
+    "duration": [["2", "duration"]]
+  },
+  "constraints": {
+    "duration": { "min": 4, "max": 15 }
+  }
+}
