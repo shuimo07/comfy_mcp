@@ -17,7 +17,12 @@ $maps = @(
     @('C:\Users\legion\WorkBuddy',                  'E:\WorkBuddy'),
     # 2026-09-16: WorkBuddy 桌面版更新器下载缓存（installer.exe，单个 500MB+）。
     # 每次自动更新都会往这里丢一个新安装包，属于纯下载缓存，放 E 盘不影响更新。
-    @('C:\Users\legion\AppData\Local\@genieworkbuddy-desktop-updater', 'E:\WBData\local\genieworkbuddy-updater')
+    @('C:\Users\legion\AppData\Local\@genieworkbuddy-desktop-updater', 'E:\WBData\local\genieworkbuddy-updater'),
+    # 2026-09-16: ComfyUI Desktop 的两个 C 盘落点（本轮新发现，共约 214MB）。
+    #   1) 更新器下载缓存里的安装包（150MB+，纯下载缓存）
+    #   2) Roaming 下的配置/日志目录（目录名含空格，注意引用）
+    @('C:\Users\legion\AppData\Local\comfyui-desktop-2-updater', 'E:\WBData\local\comfyui-desktop-2-updater'),
+    @('C:\Users\legion\AppData\Roaming\Comfy Desktop',           'E:\WBData\roaming\ComfyDesktop')
 )
 foreach ($m in $maps) { Ensure-Junction $m[0] $m[1] }
 

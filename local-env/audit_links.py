@@ -27,6 +27,11 @@ EXPECTED = [
     # 2026-09-16 新增：WorkBuddy 桌面版更新器下载缓存（installer.exe，单个 500MB+，纯缓存）
     (r"C:\Users\legion\AppData\Local\@genieworkbuddy-desktop-updater",
      r"E:\WBData\local\genieworkbuddy-updater"),
+    # 2026-09-16 新增：ComfyUI Desktop 的 C 盘落点（更新器安装包 150MB+ / Roaming 配置与日志）
+    (r"C:\Users\legion\AppData\Local\comfyui-desktop-2-updater",
+     r"E:\WBData\local\comfyui-desktop-2-updater"),
+    (r"C:\Users\legion\AppData\Roaming\Comfy Desktop",
+     r"E:\WBData\roaming\ComfyDesktop"),
 ]
 
 
