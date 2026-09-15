@@ -203,6 +203,15 @@ op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
      --output-directory "E:/Comfy-Desktop/ComfyUI-Shared/output" >> "E:/ComfyUI-MCP/logs/comfyui-headless.log" 2>&1
    ```
    重启 = `TaskStop` 掉旧后台任务 + 重新起一条。
+   **但它并不算真正独立**：进程仍挂在会话的后台 shell 上，会话/后台任务被回收时会**连带被杀**
+   （实测发生过一次）。要彻底脱离，得用 WMI `Invoke-CimMethod Win32_Process -MethodName Create`
+   或注册计划任务（沙箱里 WMI 建进程会被拦，只能在真实终端做）。
+   附带坑：`logs\comfyui-headless.pid` 是 **launcher 写的**，launcher 启的那份被杀后 PID 文件
+   不会更新，会留下**过期 PID**（实测文件里写 21436，真实进程是 5064→16884）。
+   → **判 ComfyUI 是否在跑，只认"端口 8188 是否监听 + 进程命令行匹配"，不要信 PID 文件**；
+   `status-comfyui.bat` / `stop-comfyui.bat` 若只读它就会误判。
+   查进程实况：Bash 里直接 `tasklist` 会被拦 → 用 PowerShell
+   `Get-CimInstance Win32_Process -Filter "Name='python.exe'"` 写文件，再用 Python 读。
 4. **改完节点必须重启 ComfyUI 才生效**（`custom_nodes` 里的 `__pycache__` 不用手动清）。
 5. **`sageattention` 别默认开**：装了 `sageattention 2.2 + triton-windows` 后，
    triton 只有 `backends/nvidia/driver.c`、没预编译 `cuda_utils.pyd`，
