@@ -13,6 +13,8 @@
 | 启动器 | `E:\ComfyUI-MCP\comfy_launcher.py` |
 | 模型路径映射 | `E:\ComfyUI-MCP\extra_model_paths.yaml` |
 | 一键重建 | `E:\ComfyUI-MCP\setup.bat` |
+| 自定义工作流 | `E:\ComfyUI-MCP\workflows\`（经 `COMFY_MCP_WORKFLOW_DIR` 生效） |
+| 本地执行器 | `E:\ComfyUI-MCP\tools\run_workflow.py`（复用 MCP 真实渲染逻辑） |
 | ComfyUI 本体 | `E:\Comfy-Desktop\ComfyUI-Installs\ComfyUI\`（Comfy Desktop 独立版 v0.28.0） |
 | 模型 / 输入 / 输出 | `E:\Comfy-Desktop\ComfyUI-Shared\` |
 | 运行日志 | `E:\ComfyUI-MCP\logs\comfyui-headless.log` |
@@ -38,9 +40,9 @@ WorkBuddy 侧配置：`C:\Users\legion\.workbuddy\mcp.json`，服务名 `comfyui
 > 想让 **Comfy Desktop 图形界面**用 8188，先跑 `stop-comfyui.bat` 释放端口，
 > 再打开 Comfy Desktop。两者同时开的话，Desktop 会自动换端口。
 
-## 已暴露的工具（17 个）
+## 已暴露的工具（18 个）
 
-生成：`generate_image` `generate_song` `regenerate`
+生成：`generate_image` `generate_song` `douyin_cover` `regenerate`
 查看：`view_image`
 任务：`get_queue_status` `get_job` `list_assets` `get_asset_metadata` `cancel_job`
 配置：`list_models` `get_defaults` `set_defaults`
@@ -49,13 +51,71 @@ WorkBuddy 侧配置：`C:\Users\legion\.workbuddy\mcp.json`，服务名 `comfyui
 
 `workflows/` 下的 JSON 会被自动发现成工具，用 `PARAM_*` 占位符暴露参数。
 
-## ⚠️ 当前缺模型
+## 模型与出图质量
 
-`E:\Comfy-Desktop\ComfyUI-Shared\models` 里目前只有几个 `.part` **未下载完成**的文件
-（wan2.2 i2v 视频模型），没有可用的 checkpoint。
-`list_models` 返回空，`generate_image` 会因为没有模型而失败。
+当前唯一可用 checkpoint：`v1-5-pruned-emaonly-fp16.safetensors`（**SD1.5**，2.13 GB），
+在 `E:\Comfy-Desktop\ComfyUI-Shared\models\checkpoints\`。
 
-先往 `models\checkpoints\` 放一个大模型（SD1.5 / SDXL 等）再出图。
+> 早前记的「有 20 GB wan2.2 未下完」是**误读** —— 那几个 `.part` 每个只有 ~60 MB，是空壳。
+> 视频生成这条路当前走不通（缺模型，且 8 GB 显存本身也不够）。
+
+### SD1.5 的题材适配（实测：28 步 / dpmpp_2m / karras / cfg 7.5）
+
+| 题材 | 效果 | 说明 |
+|---|---|---|
+| 氛围静物、逆光、剪影 | ★★★★★ | 直接能当封面。实测「雨天窗边书桌+热茶」「逆光窗边读书剪影」都很好 |
+| 水墨山水、意境 | ★★★★☆ | 层次和留白很到位；偶发中心小彩斑，建议多抽几张挑 |
+| 抽象科技、神经网络 | ★★☆☆☆ | 容易糊成满屏纹理，没有视觉焦点。这类别用 SD1.5 |
+| 具体动物、人物正脸 | ★☆☆☆☆ | 实测「仙鹤」被画成一道红色笔触。主体越具体越容易崩 |
+
+**结论**：SD1.5 适合**文学向氛围图**，不适合科技向信息图。
+要抬上限就换 **SDXL**（约 6.5 GB，8.6 GB 显存可跑）。
+
+## 自定义工作流
+
+服务端会把 `COMFY_MCP_WORKFLOW_DIR` 下的 `*.json` **自动发现成一个 MCP 工具**，
+参数用 `PARAM_*` 占位符暴露。该变量是**替换**语义而非追加 ——
+所以工作流放在本仓库自己的 `workflows\`（上游那三个已拷进来），submodule 保持干净。
+
+可用的占位符名（只有这些是「可选 + 有内置默认值」）：
+
+| 占位符 | 类型 |
+|---|---|
+| `PARAM_PROMPT` | str，**必填** |
+| `PARAM_NEGATIVE_PROMPT` | str |
+| `PARAM_INT_SEED` `PARAM_INT_STEPS` `PARAM_INT_WIDTH` `PARAM_INT_HEIGHT` | int |
+| `PARAM_FLOAT_CFG` `PARAM_FLOAT_DENOISE` | float |
+| `PARAM_STR_SAMPLER_NAME` `PARAM_STR_SCHEDULER` `PARAM_MODEL` | str |
+
+**任何不在这组名字里的参数都会变成必填** —— canvas 尺寸因此直接写死在节点里，
+保证「只给 prompt」也能出正确比例。
+
+### 已有：`douyin_cover`（抖音竖版封面 / 配图）
+
+- 画布 576×768（3:4），再走 latent 1.5× + hires fix（denoise 0.5）→ **输出 864×1152**
+- 实测 **14–17 秒/张**（模型已在显存时）
+- 参数：`prompt`（必填）、`negative_prompt`、`steps`、`cfg`、`sampler_name`、`scheduler`、`seed`
+
+不连 MCP 也能本地跑，走的是与 MCP 完全相同的渲染代码路径：
+
+```bat
+cd E:\ComfyUI-MCP
+.venv\Scripts\python.exe tools\run_workflow.py list
+.venv\Scripts\python.exe tools\run_workflow.py douyin_cover prompt="..." steps=28 seed=123
+```
+
+### 加新工作流
+
+1. 在 ComfyUI 界面搭好，导出 **API 格式**的 JSON
+2. 丢进 `E:\ComfyUI-MCP\workflows\`
+3. 把要暴露的参数值改成 `PARAM_*` 占位符
+4. 重启 WorkBuddy 即可（服务端启动时扫描，文件 mtime 变化也会热重载定义）
+
+### 已知小瑕疵
+
+`douyin_cover` 返回的 `width` / `height` 报的是 **576×768**，实际产物是 **864×1152**。
+这是上游 `_get_asset_metadata` 从工作流的 `EmptyLatentImage` 推尺寸导致的，
+不影响出图，**以文件本身为准**。
 
 ## 排错
 
@@ -115,9 +175,19 @@ git -C E:\ComfyUI-MCP reset --hard <sha>    :: 整体回滚
 7. 双击 `start-comfyui.bat` 预热后端，然后在对话里说「用 ComfyUI 画一张……」
 8. 回归自检：`GEN=1 .\.venv\Scripts\python.exe tools\mcp_selftest.py`
 
-## 实测记录（2026-09-15）
+## 实测记录
+
+**2026-09-15（接入）**
 
 - 端到端 MCP 握手通过，17 个工具全部可见。
 - `generate_image` 出图成功 → `ComfyUI_00001_.png`（512×512，386 KB）。
 - **含拉起 ComfyUI 后端在内，全程 29 秒**；后端已预热时握手是秒级的。
 - 冷启动 ComfyUI 约 60 秒（首次），缓存热后约 15–20 秒。
+
+**2026-09-15（自定义工作流）**
+
+- 新增 `douyin_cover` 后工具数 **17 → 18**，MCP 端到端再次通过。
+- 单张 3:4 竖版（864×1152，含 hires fix）**14–17 秒**，
+  GPU = RTX 4060 Laptop / 8.6 GB，SD1.5、28+12 步。
+- 题材适配结论见上文表格（氛围/剪影/水墨好，动物/科技抽象差）。
+- `COMFY_MCP_WORKFLOW_DIR` 由 `comfyui-mcp-server\workflows` 改为 `E:\ComfyUI-MCP\workflows`。

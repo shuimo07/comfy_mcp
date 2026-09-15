@@ -12,7 +12,7 @@
         "COMFYUI_AUTOSTART": "1",
         "COMFYUI_BOOT_TIMEOUT": "90",
         "COMFY_MCP_DEFAULT_IMAGE_MODEL": "v1-5-pruned-emaonly-fp16.safetensors",
-        "COMFY_MCP_WORKFLOW_DIR": "E:\\ComfyUI-MCP\\comfyui-mcp-server\\workflows",
+        "COMFY_MCP_WORKFLOW_DIR": "E:\\ComfyUI-MCP\\workflows",
         "COMFYUI_OUTPUT_ROOT": "E:\\Comfy-Desktop\\ComfyUI-Shared\\output",
         "COMFY_MCP_ASSET_TTL_HOURS": "24",
         "PYTHONUNBUFFERED": "1",

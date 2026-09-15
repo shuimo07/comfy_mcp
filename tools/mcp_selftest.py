@@ -15,7 +15,7 @@ ENV = {
     "COMFYUI_BOOT_TIMEOUT": "150",
     "COMFY_MCP_DEFAULT_IMAGE_MODEL": os.getenv(
         "COMFY_MCP_DEFAULT_IMAGE_MODEL", "v1-5-pruned-emaonly-fp16.safetensors"),
-    "COMFY_MCP_WORKFLOW_DIR": os.path.join(BASE, "comfyui-mcp-server", "workflows"),
+    "COMFY_MCP_WORKFLOW_DIR": os.path.join(BASE, "workflows"),
     "COMFYUI_OUTPUT_ROOT": r"E:\Comfy-Desktop\ComfyUI-Shared\output",
     "COMFY_MCP_ASSET_TTL_HOURS": "24",
     "PYTHONUNBUFFERED": "1",
@@ -65,13 +65,14 @@ async def main():
 
             if os.getenv("GEN") == "1":
                 prompt = os.getenv("GEN_PROMPT", "a red apple on a wooden table, soft light")
-                print(f">>> 实际出图: {prompt!r} (约 20-60s) ...")
+                tool = os.getenv("GEN_TOOL", "douyin_cover")
+                print(f">>> 实际出图: {prompt!r} via {tool} (约 15-30s) ...")
                 try:
-                    res = await session.call_tool("generate_image", {"prompt": prompt})
-                    print(f">>> generate_image -> {'错误' if res.isError else '成功'}")
+                    res = await session.call_tool(tool, {"prompt": prompt})
+                    print(f">>> {tool} -> {'错误' if res.isError else '成功'}")
                     print("    " + text_of(res)[:900].replace("\n", "\n    "))
                 except Exception as e:
-                    print(f">>> generate_image 异常: {type(e).__name__}: {e}")
+                    print(f">>> {tool} 异常: {type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":
