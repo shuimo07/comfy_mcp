@@ -77,16 +77,34 @@ def junction_target(path):
 
 
 def count(path, cap=None):
-    """返回 (文件数, 字节数, 是否被截断)。"""
+    """返回 (文件数, 字节数, 是否被截断)。
+
+    必须 reparse-aware：os.walk 默认会下穿 junction（os.path.islink 对 junction 返回 False），
+    而待统计的目录内部可能已经嵌了指向 E 盘的联接 —— 不剪枝就会把 E 盘数据算成 C 盘占用，
+    得出「搬迁后占用反而变大」的错误结论（2026-09-18 实测踩到）。
+    """
     nf = 0
     nb = 0
     if not os.path.exists(path):
         return 0, 0, False
     for dp, dn, fn in os.walk(path, onerror=lambda e: None):
-        nf += len(fn)
-        for f in fn:
+        keep = []
+        for d in dn:
             try:
-                nb += os.path.getsize(os.path.join(dp, f))
+                if os.lstat(os.path.join(dp, d)).st_file_attributes & ATTR_REPARSE:
+                    continue
+            except OSError:
+                continue
+            keep.append(d)
+        dn[:] = keep
+        for f in fn:
+            fp = os.path.join(dp, f)
+            try:
+                st = os.lstat(fp)
+                if st.st_file_attributes & ATTR_REPARSE:
+                    continue
+                nb += st.st_size
+                nf += 1
             except OSError:
                 pass
         if cap and nf >= cap:
