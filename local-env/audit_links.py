@@ -94,6 +94,13 @@ def count(path, cap=None):
     return nf, nb, False
 
 
+# 少数子目录在 E 端用了不同的名字（历史原因：早年先建了 local_storage，
+# 后来 storage 这条联接指过去），不在这里登记就会永远误报「目标不符」。
+WB_ALIAS = {
+    'storage': 'local_storage',
+}
+
+
 def expand_workbuddy():
     """动态展开 C:\\Users\\legion\\.workbuddy 的每个子目录 -> E 盘对应位置。"""
     wb = r"C:\Users\legion\.workbuddy"
@@ -106,7 +113,7 @@ def expand_workbuddy():
             continue
         p = os.path.join(wb, n)
         if os.path.isdir(p):
-            out.append((p, os.path.join(wb_dst, n)))
+            out.append((p, os.path.join(wb_dst, WB_ALIAS.get(n, n))))
     return out
 
 
