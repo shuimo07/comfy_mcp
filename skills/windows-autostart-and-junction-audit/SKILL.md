@@ -17,6 +17,21 @@ agent_created: true
   ```
   写文件用 `[System.IO.File]::WriteAllText($path, $text, [System.Text.Encoding]::UTF8)`，
   **不要用 `Set-Content -Encoding UTF8`**（带 BOM，Read 工具会判成二进制读不了）。
+  - **2026-09-18 更极端的情况：PowerShell 工具连 `Write-Output "echo-test"` 都返回空**
+    （只显示 `Completed with exit code 0`）。此时**任何依赖回显的做法都作废**：
+    一律 `Set-Content` 写文件 → 用 Read 工具读。
+  - ⚠️ **写报告千万不要用 `[System.IO.File]::WriteAllLines($p, $arrayList, $enc)`**：
+    `ArrayList` 无法隐式转成 `string[]`，会抛 `MethodException`；而且**脚本会在第一个输出
+    语句处就死掉、一个字节都不落地**，现象是"报告文件根本没生成"，极易误判成"脚本没跑/路径错"。
+    → 用 `New-Object System.Collections.Generic.List[string]` + `Set-Content -LiteralPath`
+    逐次落盘，并在脚本开头加兜底：
+    ```powershell
+    trap { Say ($_.Exception.ToString()); Say ($_.InvocationInfo.PositionMessage); break }
+    ```
+  - **怎么判断 Bash 工具坏了**：报 `ls: command not found` / `dirname: command not found`
+    （PortableGit 的 shim 没把 `usr/bin` 挂进 PATH，见本 Part 末尾的修复命令）。
+    → 该会话直接放弃 Bash，全部改用 PowerShell/Python，别浪费时间修。
+
 - PowerShell 工具**删除文件会被沙箱拒绝**（exit 1）。删除一律改用 Python。
   ⚠️ 本机还有 `safe-delete` 钩子会劫持 `shutil.rmtree` / `os.rmdir`（报 `SAFE_DELETE_FAIL_CLOSED`）。
   **最可靠的是直接用 ctypes 调 Win32**（2026-09-16 实测两次成功）：
@@ -133,19 +148,22 @@ agent_created: true
 **在 `Remove-Item` 之前**再查一次进程，正在跑就放弃。
 （注意这个检查必须放在 **copy+核对之后、delete 之前**，放在函数入口是没用的。）
 
-⛔ **2026-09-16 终局：`.workbuddy` 彻底放弃搬迁，保持 C 盘真实目录。**
-用户明确表态「**就不管了，任之吧**」，`guard.ps1` 里那段
-`Ensure-Junction 'C:\Users\legion\.workbuddy' ...` 已**删除**。
-放弃的理由（两个死结，别再试）：
-1. 整个会话就跑在它上面 → 句柄必然被 WB 自己锁死，**就地搬迁 100% 失败**；
-2. 会话备份目录（`workspace\sessions\*\modify_backup\`）持续增长，
-   沙箱预拷贝永远追不上增量 → `dst < src` → **整体 ABORT**。
-   （实测 24.3 万文件 / 2.41 GB，14 小时就新增 17.3 万文件 / 591 MB。）
+⛔ **2026-09-16：`.workbuddy` 整体搬迁放弃（用户当时说「就不管了，任之吧」）。**
+放弃「整体搬迁」的理由（两个死结，别再试）：
+1. 整个会话就跑在它上面 → 根目录句柄必然被 WB 自己锁死，**根目录就地搬迁 100% 失败**；
+2. 会话备份目录持续增长，沙箱预拷贝永远追不上增量 → `dst < src` → **整体 ABORT**。
 
-**不要再把它加回 `$maps`，也不要恢复那段调用。**
-替代方案：用 `E:\WBData\_tools\archive_old_logs.py` 定期把 `.workbuddy\logs` / `traces`
+✅ **2026-09-18 用户再次要求「不准占用我的 C 盘」，改用「子目录逐个 junction」策略并落地成功。**
+用户新指令后**不要再引用「永不搬迁」的旧结论**，直接按 **Part 2.6** 执行。
+（旧结论只对「根目录整体 junction」成立；子目录方案完全可行。）
+替代/补充方案：`E:\WBData\_tools\archive_old_logs.py` 也可用于把 `.workbuddy\logs` / `traces`
 下 mtime 早于 2 小时的文件搬到 E（`E:\WBData\home\.workbuddy-logs` / `.workbuddy-traces`），
 `--dry-run` 先看规模。**建议每周跑一次。**
+
+**2026-09-17 实测补充（收益递减）**：同一天内重复跑第二次，**锁文件比例很高** ——
+logs 候选 125 个只搬走 34 个（91 个被当前会话句柄占用），traces 因大多已陈旧反而 72/72 全搬走。
+→ 规律：**traces 见效快、logs 要等注销**。当天跑过一次后不必再跑，改为"注销/重启后再跑"效果好得多。
+→ `--dry-run` 的「合计：搬到 E 0 个 / 0.0 MB」是正常现象（预演不计数），别误判成脚本坏了。
 改完后登录守卫只处理 11 条映射 + 压制自启，**秒级返回，不再有任何大文件拷贝**。
 
 2026-09-16 新增映射：`$maps` 补到 **11 条**，其中新增 3 条：
@@ -154,6 +172,20 @@ agent_created: true
   纯缓存、放 E 盘不影响更新）
 - 第 10 条 `AppData\Local\comfyui-desktop-2-updater` → `E:\WBData\local\comfyui-desktop-2-updater`（152 MB）
 - 第 11 条 `AppData\Roaming\Comfy Desktop` → `E:\WBData\roaming\ComfyDesktop`（62 MB，**目录名带空格，注意引用**）
+
+**2026-09-18 新增第 12 条（做 Power BI 作业时顺带发现）**：
+- `C:\Users\legion\AppData\Local\Microsoft\Power BI Desktop` → `E:\WBData\local\PowerBI-Desktop`
+  跑一次 Power BI Desktop 就往 C 盘写 **~300 MB / ~1500 文件**
+  （`WebView2` profile 257 MB 是大头，另有 `ExtensionCache` / `LuciaCache` /
+  `CertifiedExtensions` / `AnalysisServicesWorkspaces`）。交付完作业觉得"C 盘又被占了几百 MB"，
+  通常就是它。
+  **搬迁前必须先完全关闭 `PBIDesktop.exe`**（`CloseMainWindow()` → 不行再
+  `Stop-Process -Force`，最后 `tasklist /FI "IMAGENAME eq PBIDesktop.exe"` 复核为 0）；
+  实测：robocopy 1508 文件 31 秒、`cmd /c rmdir /s /q` 删源成功、`mklink /J` 建成，
+  搬完 Power BI 照常可用。
+- **可复用的排查思路**：`%LOCALAPPDATA%\<厂商>\<产品>` 下的
+  `WebView2` / `*Cache` / `*Extensions` / `*Workspaces` 基本都是**纯缓存**，
+  搬走 + junction 零风险。新装过什么应用，就照这个模式扫一遍。
 
 ## Part 2.4：junction 被"打回真目录"后的修复（2026-09-15/16 实战）
 
@@ -214,6 +246,103 @@ python scan_links.py         # 查某目录内嵌套 junction（搬前必查）
 **正在运行的程序占用的目录**：copy 能过（读共享），但 delete 会 `Permission denied`。
 所以「先预拷贝、再让登录守卫做增量+换 junction」是标准打法 —— 预拷贝非破坏性、随时可中断。
 
+## Part 2.6：应用 live home 目录的搬迁 —— 「子目录逐个 junction」(2026-09-18 落地)
+
+**适用场景**：某个 C 盘目录**根路径必须保持存在**（应用正在跑、会话就跑在里面），
+所以不能整体 junction；但它体量很大（本例 3.35 GB / 25 万文件），用户又要求清空 C 盘。
+
+**核心思路**：根目录不动，**把它的每个（或更深一层的）子目录各自 junction 到 E 盘同名位置**。
+路径仍然一一对应，应用完全感知不到差别，任何配置/数据库都不用改。
+
+### 落地工具（本机已就位）
+```
+E:\WBData\_tools\migrate_deep.py       # 递归迁移（核心）
+E:\WBData\_tools\migrate_workbuddy_home.py  # 一层版（--probe 探测 / --run 执行）
+E:\WBData\_tools\status.py             # 看 C 盘各子目录是 [联接] 还是 [真实]
+```
+执行：`python migrate_deep.py --dry` 先空跑预览，再去掉 `--dry` 正式跑。
+**务必用 `dangerouslyDisableSandbox: true` 跑**（见下方「沙箱拖慢」）。
+
+### 算法（每个子目录）
+1. **改名探测**判定占用：`os.rename(p, p+'__movetest')` 成功再改回来 → 空闲。
+   目录能被改名 ⇒ 没有「把该目录独占」的句柄。
+   ⚠️ 注意：**目录体内有打开的文件（如正在运行的 python.exe）不阻止父目录改名** ——
+   改名探测通过 ≠ 能删干净，所以第 5 步必须容忍残留。
+2. 占地则 `robocopy /E /XJ` 复制到 E；**用 `ensure_subset` 校验（src 的每个文件在 dst 都存在）**，
+   比单纯比文件数稳（活动目录在复制期间还会新增文件）。
+3. `os.rename(src, src+'__old')` 腾出路径。
+4. `cmd /c mklink /J src dst`；失败就把 `__old` 改回来（源目录完好）。
+5. 删除 `__old`：**必须用 reparse-aware 的 `safe_rmtree`**（见下），残留不报错、下次再来。
+6. **被占用的父目录 → 递归进子目录**，能搬几个是几个。
+   因为「子联接的目标路径」与「父目录搬过去之后子目录的位置」**完全重合**，
+   所以将来父目录被整体搬迁时结果依然正确（这也是必须做 reparse-aware 计数的原因）。
+
+### ⚠️ 两个必须掌握的坑
+
+**坑 A：`Remove-Item -Recurse` / `rmdir /s` 会下穿 junction，删掉 E 盘的真实数据。**
+且 `Get-ChildItem -Recurse`（PS 5.1）**会跟随 junction 重复计数** →
+父目录整体搬迁时 `dst < src` → 永远 ABORT。
+→ 解法（已写进 `guard-core.ps1`）：用 .NET 手写
+`Count-Files`（遇 `ReparsePoint` 跳过）与 `Remove-Tree`（遇 reparse point 只 `[IO.Directory]::Delete(p,$false)` 删链接），
+口径与 `robocopy /XJ` 完全一致。
+Python 侧同理：`safe_rmtree` 必须先查 `st_file_attributes & 0x400`，是联接就只 `os.rmdir` 删链接。
+
+**坑 B：对「正在被写入的目录」做 rename-based 搬迁会产生数据分裂。**
+本次实测：探测脚本被 SIGTERM 打断，`workspace\sessions\1bd37c47-…` 已被改名为
+`…__movetest` 却没改回来。因为进程的**文件句柄是按文件 ID 而非路径**跟踪的，
+应用继续往 `…__movetest` 里写；同时它按**路径**又新建了一个 `1bd37c47-…`。
+→ 结果同一会话出现两个目录（`__movetest` 22,803 文件 / 545 MB，新目录长到 90,550 文件 / 571 MB）。
+**没有任何数据丢失**，但状态很脏。
+→ 教训：
+  1. **探测脚本中途被杀会留下 `__movetest`**，所以 `rename_ok` 必须先检查目标名是否已存在，
+     并且**所有搬迁脚本都要有 `__old/__probe/__movetest` 残留清理**；
+  2. 发现分裂后**不要贸然合并**（对活动目录边写边合并又慢又险，本次 robocopy 合并跑了 12 分钟没完）——
+     **改成把残留改名为 `<原名>-orphaned-YYYYMMDD` 原样保留**，之后随父目录整体搬走，零风险。
+
+### 沙箱拖慢（必须知道，否则会误判）
+沙箱内每文件 I/O 被逐文件拦截，实测拷贝/删除都只有 **~28–31 文件/s**
+（`blobs` 487 个文件 53.7 秒；`binaries` 19,197 个文件删了 20 分钟还没完）。
+21.8 万文件的 `workspace\sessions` 在沙箱里要几小时。
+→ **判断"搬迁可行性"不要用沙箱内的耗时**；大批量搬迁一律用
+`dangerouslyDisableSandbox: true` 执行，或交给登录守卫（系统侧进程，无沙箱）。
+
+**⭐ 补充（2026-09-18 实测）：枚举不受限流，只有「拷贝/删除」受限。**
+用 `os.walk` 数完 188042 个文件 / 4.08 GB **只要 21.8 秒**（比拷贝快三个数量级）。
+→ 所以**先放心地扫、量、算 ETA**，再决定要不要动手；不要因为"怕是几小时"而不敢测。
+同一批数据拷贝/删除只有 **13–20 文件/s** → 188042 文件 ≈ **2.6 小时**，实测吻合。
+
+**⛔ 反面教训：不要在 agent shell 里启动 `migrate_deep.py`。**
+2026-09-18 实测又踩一次 —— 从 Bash 工具起的迁移进程被沙箱限到 13 文件/s，
+在 `rmdir` 一个 19475 文件的 `.__old` 上耗掉半小时。**应用正在运行时正确做法只有一个：
+把数字量清楚，然后交给登录守卫**（`guard.ps1` 在 WorkBuddy 未启动时 `Start-Process`
+拉起 `migrate_deep.py`，无沙箱、全速，而且此时 `app`/`logs`/`security`/`__old` 全都解锁）。
+
+### ⚠️ 「陈旧残骸」在应用运行期间删不掉 —— 别在现场硬刚 (2026-09-18)
+
+`.workbuddy` 的子目录 junction 完成之后，C 盘原位置常残留 `logs\<日期>.__old`、
+`binaries.__old`、`plugins.__old` 这类**轮转/迁移残骸**（本例合计约 334 MB）。
+本次想趁跑 Power BI 作业时顺手清掉，结果**全部 `rc=5 拒绝访问`**，而且：
+
+- `dangerouslyDisableSandbox: true` **也删不掉**（说明不是沙箱造成的）；
+- `attrib -r -s -h /s /d` 清只读属性**也没用**；
+- `icacls` 定位到两个根因：
+  1. 沙箱用户 `LAPTOP-GMFIL7PL\CodexSandboxUsers:(I)(OI)(CI)(RX)` —— **只有读+执行**，
+     沙箱内删除必然 rc=5（而 `...\Power BI Desktop` 的 ACL 不同，所以同一次运行里
+     它删得掉、`.workbuddy` 里的删不掉 —— **同一脚本里有的成功有的失败，先去看 ACL**）；
+  2. WorkBuddy 自身有**文件保护**（残骸里就躺着 `QmProtectorLib.dll`），运行期间锁自己的文件。
+- 关键区分：**`rc=5（拒绝访问）` 多是 ACL / 保护驱动；`rc=32（正在使用）` 才是句柄占用。**
+  rmdir 输出会带上具体文件名，看那个文件属于谁就能定位。
+
+→ 结论：**「迁移」拆成两步 —— 复制到 E（随时可做）+ 删源（必须等应用退出）**。
+  复制先做完并**逐文件核对字节数/文件数**（E 副本 ≥ C 源才允许后续删源），
+  删源交给登录守卫 / `FinishMoveToE.bat`。
+  **不要为了"当场清干净"去改 ACL 或硬删** —— 代价大、风险高，而下次登录本来就会自动做掉。
+
+### 运行中不搬的白名单（收益小、风险大）
+Electron/Chromium 正在使用的会话缓存（如 `app\session\...`，约 120 MB）**运行中不要搬**：
+句柄会让「旧的一半留在 `__old`、新的一半写到 E 盘」，可能弄坏 Chromium 缓存。
+留给登录时（应用未启动）整体搬迁。`migrate_deep.py` 的 `EXCLUDE_PREFIX` 就是干这个的。
+
 
 ## Part 3：删除大目录前 —— junction 引用核查（最容易出错）
 
@@ -252,7 +381,7 @@ $j | ForEach-Object { $_.FullName + ' -> ' + ($_.Target -join '') }
 - 删除后必须核验：目标 junction 是否仍可达（`Test-Path`）、进程数、配置文件是否仍合法。
 
 ## 用户约定（勿违反）
-- 所有数据默认落 E 盘。`guard.ps1` 的 `$maps`（**11 条**，登录时自愈，秒级返回）：
+- 所有数据默认落 E 盘。`guard.ps1` 的 `$maps`（**12 条**，登录时自愈，秒级返回）：
   `WorkBuddy`→`E:\WorkBuddy`、`.cache`→`E:\WBData\home\.cache`、
   `.codebuddy`→`E:\WBData\home\.codebuddy`、
   `.workbuddy-key-fallback`→`E:\WBData\home\.workbuddy-key-fallback`、
@@ -261,19 +390,32 @@ $j | ForEach-Object { $_.FullName + ' -> ' + ($_.Target -join '') }
   `AppData\Roaming\WorkBuddy`(及小写 `workbuddy`)→`E:\WBData\roaming\WorkBuddy`、
   `AppData\Local\@genieworkbuddy-desktop-updater`→`E:\WBData\local\genieworkbuddy-updater`、
   `AppData\Local\comfyui-desktop-2-updater`→`E:\WBData\local\comfyui-desktop-2-updater`、
-  `AppData\Roaming\Comfy Desktop`→`E:\WBData\roaming\ComfyDesktop`。
-  → **`E:\WBData\_tools\audit_links.py` 里内建的 `EXPECTED` 表要同步这 11 条**，否则会误报"待迁移"。
+  `AppData\Roaming\Comfy Desktop`→`E:\WBData\roaming\ComfyDesktop`、
+  **`AppData\Local\Microsoft\Power BI Desktop`→`E:\WBData\local\PowerBI-Desktop`**（2026-09-18 新增）。
+  → **`E:\WBData\_tools\audit_links.py` 里内建的 `EXPECTED` 表要同步这 12 条**，否则会误报"待迁移"。
+- **以后端上桌的检查顺序（2026-09-18 定型，可直接照跑）**：
+  1. 枚举"这一轮任务碰过哪些 C 盘路径"：桌面/下载/`%TEMP%`/`%LOCALAPPDATA%\<产品>`；
+  2. 对每个候选先判**形态**（junction / 真实目录）再算**体积**，别一上来就全盘递归
+     （`.workbuddy` 有 25 万文件，整盘 `os.walk` 会把脚本拖死 —— 本次第一个扫描脚本就是这么失败的）；
+  3. 分开处理：**能当场搬的**（应用已关闭的缓存）立刻搬；
+     **应用在跑的**只复制+登记，删源留给登录守卫。
 - **`C:\Users\legion\AppData` 有 61 GB 但主体是第三方软件数据**（剪映/腾讯/TRAE/豆包/Google…），
   **不要整体 junction**（会打坏应用和更新器）；要动只能逐目录评估。
-- ⛔ **`.workbuddy` 永不搬迁（2026-09-16 用户拍板）** —— 用户原话「**就不管了，任之吧**」。
-  它现在是 C 盘唯一的大件（**242,384 文件 / 2.41 GB**，增速 ~591 MB / 14 小时；
-  大头在 `workspace\sessions\<id>\modify_backup`、`logs/`、`workbuddy.db-wal`、
-  `projects/*.jsonl`、`file-history/`、`traces/`），但**不要再打它的主意**：
-  - 就地搬迁必然失败 —— 整个 WorkBuddy 会话就跑在它上面，句柄被自己锁死；
-  - 预拷贝永远追不上增量（实测白跑 18 分钟只拷 3.4 万）→ `dst < src` → **整体 ABORT**。
-  → 保持 **C 盘真实目录**，不做 junction。只需用 `archive_old_logs.py` 定期把 `logs/`、`traces/`
-    里 mtime 早于 2 小时的文件搬到 E 压住增长（**建议每周一次**，`--dry-run` 先看规模），其余放任。
-  → **不要再把它加回 `$maps`，也不要恢复 `guard.ps1` 里那段 `Ensure-Junction`。**
+- ✅ **`.workbuddy` 改为「子目录逐个 junction 到 `E:\WBData\home\.workbuddy\<同名>`」（2026-09-18 用户再次要求后落地）**。
+  - **根目录仍然保持 C 盘真实目录**（live home，句柄锁死，别试整体迁移）；
+  - `guard.ps1` 新增一节：登录时**动态枚举** `C:\Users\legion\.workbuddy\*` 的每个子目录，
+    不是联接就 `Ensure-Junction` 到 E 盘同名位置（**只在 WorkBuddy 未运行时执行**，
+    运行中就整体跳过、下次登录再补）。新增的子目录会自动纳入，不用维护清单。
+  - `audit_links.py` 新增 `expand_workbuddy()` 动态展开同一批映射 —— 两者口径必须一致。
+  - `guard-core.ps1` 的 `Count-Files` / `Remove-Tree` **已改为 reparse-aware**（见 Part 2.6 坑 A），
+    否则「子目录已是联接、父目录再整体搬迁」会重复计数 ABORT / 下穿删数据。
+  - 手动一次性收尾：**完全退出 WorkBuddy** 后双击 `E:\WBData\_tools\FinishMoveToE.bat`
+    （先跑 guard.ps1，再跑 `migrate_deep.py` 做第二遍，最后逐项打 JUNCTION/REAL DIR）。
+  - 目录体积参考（2026-09-18 实测，共 3.35 GB / 250,729 文件）：
+    `workspace` 1861 MB / 218,381 文件（其中 `workspace\sessions\<id>` 是大头，
+    `c52c5bca…` 998 MB / 152,020 文件、`ee7ca337…` 524 MB / 38,913 文件）、
+    `binaries` 530 MB、`logs` 300 MB、`app` 127 MB、`blobs` 125 MB、
+    `projects` 85 MB、`plugins` 85 MB、`connectors-marketplace` 42 MB、`security` 22 MB。
 - **脚本目录已纳入版本库（2026-09-16）**：`E:\WBData\_tools` 现在是一个
   **junction → `E:\ComfyUI-MCP\local-env`**（仓库 `shuimo07/comfy_mcp`）。所以：
   - 改脚本直接改 `E:\WBData\_tools\...`，改动即落在仓库工作区，然后

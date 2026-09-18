@@ -22,16 +22,53 @@ $maps = @(
     #   1) 更新器下载缓存里的安装包（150MB+，纯下载缓存）
     #   2) Roaming 下的配置/日志目录（目录名含空格，注意引用）
     @('C:\Users\legion\AppData\Local\comfyui-desktop-2-updater', 'E:\WBData\local\comfyui-desktop-2-updater'),
-    @('C:\Users\legion\AppData\Roaming\Comfy Desktop',           'E:\WBData\roaming\ComfyDesktop')
+    @('C:\Users\legion\AppData\Roaming\Comfy Desktop',           'E:\WBData\roaming\ComfyDesktop'),
+    # 2026-09-18: Power BI Desktop 的运行缓存（WebView2 profile 257MB + ExtensionCache /
+    #   LuciaCache / CertifiedExtensions / AnalysisServicesWorkspaces …，合计约 300MB）。
+    #   每跑一次 Power BI 就往 C 盘写一份，属纯缓存，搬到 E 盘不影响使用（路径不变）。
+    @('C:\Users\legion\AppData\Local\Microsoft\Power BI Desktop', 'E:\WBData\local\PowerBI-Desktop')
 )
 foreach ($m in $maps) { Ensure-Junction $m[0] $m[1] }
 
-# --- C:\Users\legion\.workbuddy ------------------------------------------------
-# 2026-09-16: 用户明确决定「就不管了，任之吧」—— 停止搬迁，保持 C 盘真实目录。
-# 历史：曾整体搬迁（218k 文件 / 2.4 GB），但沙箱预拷贝跟不上增量（会话备份目录一直涨），
-#       且始终被运行中的 WorkBuddy 句柄死锁，反复 ABORT。
-# ⛔ 禁止再把它加回 $maps、也禁止恢复本段 Ensure-Junction 调用。
-#    （对应记忆：~/.workbuddy/MEMORY.md「存储」章节 2026-09-16 更新）
+# --- C:\Users\legion\.workbuddy  (subdirectory migration) ----------------------
+# 2026-09-18: user asked again to keep everything off C:. The .workbuddy ROOT still
+# cannot be a junction - it is the LIVE WorkBuddy home (the running session and the
+# interpreters this shell uses both live inside it), so the root handle stays locked.
+# Policy change: instead of dropping the whole idea, migrate every SUBDIRECTORY
+# (recursing into the ones that are held open) to E:\WBData\home\.workbuddy\<same>
+# and junction it back. All paths stay identical, so no config, database, shortcut
+# or registry entry has to change - the app cannot tell the difference.
+#
+# The heavy lifting runs DETACHED (migrate_deep.py) so logon is never blocked.
+# That script has its own lock (no duplicate runs), its own rename probe as the
+# final safety net, and it also repairs a junction that got replaced by a real
+# directory. If the bundled python cannot be found - e.g. its own junction is
+# broken - we fall back to a synchronous pass over the immediate children only.
+$wbHome    = 'C:\Users\legion\.workbuddy'
+$wbDstRoot = 'E:\WBData\home\.workbuddy'
+if (Test-Path -LiteralPath $wbHome) {
+    $wbRunning = @(Get-Process -Name 'WorkBuddy', 'workbuddy', 'WorkBuddy Helper' -ErrorAction SilentlyContinue).Count -gt 0
+    if ($wbRunning) {
+        Log 'workbuddy home: app is running - subdir migration deferred to next logon'
+    } else {
+        $py = Get-ChildItem -LiteralPath (Join-Path $wbHome 'binaries\python\versions') -Directory -ErrorAction SilentlyContinue |
+              Sort-Object Name |
+              ForEach-Object { Join-Path $_.FullName 'python.exe' } |
+              Where-Object { Test-Path -LiteralPath $_ } |
+              Select-Object -Last 1
+        if ($py) {
+            Start-Process -FilePath $py -ArgumentList '"E:\WBData\_tools\migrate_deep.py"' -WindowStyle Hidden
+            Log ('workbuddy home: detached migration started via ' + $py)
+        } else {
+            Log 'workbuddy home: bundled python missing - synchronous fallback'
+            New-Item -ItemType Directory -Force -Path $wbDstRoot | Out-Null
+            Get-ChildItem -LiteralPath $wbHome -Force -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) { return }
+                Ensure-Junction $_.FullName (Join-Path $wbDstRoot $_.Name)
+            }
+        }
+    }
+}
 
 # stale WorkBuddy temp dirs left in the old TEMP location
 $oldTemp = 'C:\Users\legion\AppData\Local\Temp'

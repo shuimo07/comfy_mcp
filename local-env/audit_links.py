@@ -16,9 +16,11 @@ ATTR_REPARSE = 0x400
 
 # guard.ps1 $maps 里登记的映射（源 -> 期望目标）
 EXPECTED = [
-    # ⛔ 2026-09-16: C:\Users\legion\.workbuddy 已从表中移除 —— 用户拍板「就不管了，任之吧」，
-    # 该目录保持 C 盘真实目录、永不迁移。留在表里会永远误报「待迁移」。
-    # 见 guard.ps1 顶部同名注释、使用说明.md「.workbuddy 不再搬迁」章节。
+    # 2026-09-18: C:\Users\legion\.workbuddy 的「根目录」仍然不能做成 junction
+    # （它是 WorkBuddy 的 live home，运行中的会话与解释器都在里面，根句柄锁死）。
+    # 新策略：改为「每个子目录各自 junction 到 E:\WBData\home\.workbuddy\<同名>」，
+    # 由下面的 expand_workbuddy() 动态展开，不写死清单（新增子目录会自动纳入）。
+    # 见 guard.ps1「subdirectory migration」章节。
     (r"C:\Users\legion\.codebuddy", r"E:\WBData\home\.codebuddy"),
     (r"C:\Users\legion\.workbuddy-key-fallback", r"E:\WBData\home\.workbuddy-key-fallback"),
     (r"C:\Users\legion\.cache", r"E:\WBData\home\.cache"),
@@ -34,6 +36,10 @@ EXPECTED = [
      r"E:\WBData\local\comfyui-desktop-2-updater"),
     (r"C:\Users\legion\AppData\Roaming\Comfy Desktop",
      r"E:\WBData\roaming\ComfyDesktop"),
+    # 2026-09-18 新增：Power BI Desktop 运行缓存（WebView2 profile + 各类 Cache，
+    # 约 300MB / 1500 文件）。跑一次 PBI 就往 C 盘写一次，纯缓存。
+    (r"C:\Users\legion\AppData\Local\Microsoft\Power BI Desktop",
+     r"E:\WBData\local\PowerBI-Desktop"),
 ]
 
 
@@ -88,8 +94,24 @@ def count(path, cap=None):
     return nf, nb, False
 
 
+def expand_workbuddy():
+    """动态展开 C:\\Users\\legion\\.workbuddy 的每个子目录 -> E 盘对应位置。"""
+    wb = r"C:\Users\legion\.workbuddy"
+    wb_dst = r"E:\WBData\home\.workbuddy"
+    out = []
+    if not os.path.isdir(wb):
+        return out
+    for n in sorted(os.listdir(wb)):
+        if any(m in n for m in ("__old", "__probe", "__movetest")):
+            continue
+        p = os.path.join(wb, n)
+        if os.path.isdir(p):
+            out.append((p, os.path.join(wb_dst, n)))
+    return out
+
+
 def main():
-    pairs = EXPECTED
+    pairs = list(EXPECTED) + expand_workbuddy()
     if len(sys.argv) > 1:
         pairs = [(p, None) for p in sys.argv[1:]]
 

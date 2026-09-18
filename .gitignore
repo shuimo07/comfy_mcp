@@ -12,6 +12,17 @@ assets/
 local-env/*.log
 local-env/legacy/*.log
 
+# ---------- local-env 的运行时状态 / 一次性脚手架 ----------
+# 迁移进程的互斥锁（内容是 PID，跑完写 0）——纯运行时状态，绝不入库
+local-env/.migrate_deep.lock
+# 一次性探测/抓取脚本与扫描输出（以 _ 开头），用完即弃
+local-env/_*
+# 手工备份（改 guard 之前留的 .bak-YYYYMMDD）
+local-env/*.bak-*
+# 迁移过程留下的临时探测目录
+local-env/**/*.__probe
+local-env/**/*.__movetest
+
 # ---------- 大文件 / 生成物 ----------
 *.safetensors
 *.ckpt
